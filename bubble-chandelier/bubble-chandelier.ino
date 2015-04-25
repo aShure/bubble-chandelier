@@ -7,7 +7,10 @@
 //  _INA1 = 2;
 //  _INB1 = 4;
 //  _EN1DIAG1 = 6;
+//  _PWM1 = 9; //fixed to timer
 //  _CS1 = A0;
+
+
 //  _INA2 = 7;
 //  _INB2 = 8;
 //  _EN2DIAG2 = 12;
@@ -15,9 +18,25 @@
 
 DualVNH5019MotorShield md;
 boolean limit = 0; // global for limit switch, 1 if triggered
+int maxCurrent = 5000;
+int motorSpeed = 0;
+int speedDown = 0;
+int speedUp = 0;
+
 void pCurrent () {
   Serial.print("Current: ");
   Serial.println(md.getM1CurrentMilliamps());
+}
+
+void travel (long time){
+  Serial.println("Traveling.");
+    for (int i = 0; i <= time; i++) //accelerating
+    {
+      checkStop();
+      if (limit == 0) { //if switch not triggered, travel further in 1ms increments, otherwise do nothing
+        delay(1);
+      }
+    }
 }
 
 void checkStop()
@@ -51,9 +70,16 @@ void checkStop()
   }
   
   if (md.getM1CurrentMilliamps() > maxCurrent) {
-    md.setM1Speed();
+    //md.setM1Speed(50);
+    Serial.println("Exceeding maxCurrent: ");
+    Serial.println(md.getM1CurrentMilliamps());
   }
   
+}
+
+void printCurrent() {
+      Serial.print("Motor current: ");
+      Serial.println(md.getM1CurrentMilliamps());
 }
 
 void setup()
@@ -61,10 +87,10 @@ void setup()
   Serial.begin(115200);
   Serial.println("Controller for Automated Bubble Machine. CC0 2015");
   md.init(); //initialize motor driver instance
-
+  printCurrent();
   // start to ride down a little bit when the machine is powered up, just to make sure that we are not past the top end switch.
 
-  if (limit == 1) Serial.println("Limit switch active.");
+  if (limit == 1) Serial.println("Limit switch active during startup.");
   if (limit == 0) {
     Serial.println("Limit switch inactive. Seaching for upper limit.");
     for (int i = 0; i <= 100; i++) //accelerating
@@ -86,19 +112,16 @@ void setup()
 
 void loop()
 {
-  for (int i = 0; i <= 400; i++)
+  for (int i = 0; i <= speedDown; i++)
   {
     md.setM1Speed(i);
     checkStop();
-    if (i % 200 == 100)
-    {
-      Serial.print("M1 current: ");
-      Serial.println(md.getM1CurrentMilliamps());
-    }
     delay(2);
   }
-
-  for (int i = 400; i >= -400; i--)
+  
+  travel(2000);
+  
+  for (int i = speedDown; i >= -400; i--)
   {
     md.setM1Speed(i);
     checkStop();
