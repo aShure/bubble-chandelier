@@ -19,12 +19,14 @@
 
 DualVNH5019MotorShield md;
 
-int speedHome = 50;
-int speedDown = 200;
-int speedUp = 100; 
-int ramp = 5; // ramp time at acceleration and deceleration
-long travelDown = 3000;
-long travelUp = travelDown;
+int speedHome = 100;
+int speedDown = -250;
+int speedUp = 250;
+int ramp = 30; // ramp time at acceleration and deceleration
+unsigned long travelDown = 3000;
+unsigned long travelUp = travelDown;
+unsigned long timeDown = 1000; //time to spend at the bottom
+unsigned long timeUp = 1000; //time to spend at the top
 
 int curSpeed = 0;
 int limit = 0; // global for limit switch, 1 if triggered
@@ -36,16 +38,20 @@ void pCurrent () {
   Serial.println(md.getM1CurrentMilliamps());
 }
 
-void travel (long time){
-  Serial.print("Traveling");
-    for (long i = 0; i <= time; i++) //travel for the given time
-    {
-      checkStop(); // check if we hit the end switch during the time we travel.
-      if (limit == 0) { //if switch not triggered, travel further in 1ms increments, otherwise do nothing
-        delay(1);
-      }
+void travel (long time) {
+  Serial.println("Traveling");
+  for (long i = 0; i <= time; i++) //travel for the given time
+  {
+    checkStop(); // check if we hit the end switch during the time we travel.
+    if (limit == 0) { //if switch not triggered, travel further in 1ms increments, otherwise do nothing
+      delay(1);
     }
-  Serial.println(".");
+    if (limit == 1) { 
+      Serial.println("! Endstop while travelling.");
+      return;
+    }
+  }
+  
 }
 
 void checkStop()
@@ -57,7 +63,7 @@ void checkStop()
       Serial.print(".");
       delay (1000);
       md.setM1Speed(0);
-      curSpeed=i;
+      curSpeed = i;
     }
     Serial.println(".");
   }
@@ -76,13 +82,13 @@ void checkStop()
       Serial.println("Limit switch triggered.");
       limit = 1;
       md.setM1Speed(0);
-      curSpeed=0;
+      curSpeed = 0;
       digitalWrite(13, 1);
       delay(30);
       return;
     }
   }
-  
+
   if (md.getM1CurrentMilliamps() > maxCurrent) {
     //md.setM1Speed(50);
     Serial.print("Exceeding maxCurrent, ");
@@ -91,14 +97,18 @@ void checkStop()
 }
 
 void printCurrent() {
-      Serial.print("Motor current: ");
-      Serial.println(md.getM1CurrentMilliamps());
+  Serial.print("Motor current: ");
+  Serial.println(md.getM1CurrentMilliamps());
 }
 
+void setVel(int s) {
+  md.setM1Speed(s);
+  curSpeed = s;
+}
 void setup()
 {
-  pinMode(3,INPUT);
-  digitalWrite(3,HIGH);
+  pinMode(3, INPUT);
+  digitalWrite(3, HIGH);
   Serial.begin(115200);
   Serial.println("Controller for Automated Bubble Machine. CC0 2015");
   md.init(); //initialize motor driver instance
@@ -111,15 +121,14 @@ void setup()
     for (int i = 0; i <= speedHome; i++) //accelerating
     {
       if (limit == 0) { //if switch not triggered, accelerate further, otherwise do nothing
-        md.setM1Speed(i);
-        curSpeed=i;
+        setVel(i);
         checkStop();
         delay(10);
       }
     }
-    
+
     Serial.println("Searching for top limit.");
-    
+
     while (limit == 0) { //if switch not triggered, pull rope in further
       checkStop();
       delay(1);
@@ -130,37 +139,56 @@ void setup()
 
 void loop()
 {
-  for (int i = 0; i <= speedDown; i++) //accelerating downwards
+  for (int i = 0; i >= speedDown; i--) //accelerating downwards
   {
-    md.setM1Speed(i);
+    setVel(i);
     checkStop();
     delay(5);
-    curSpeed=i;
   }
-  
+
   travel(travelDown); //travelling down for the predefined amount of time
-  
-  Serial.println("Decelerating to bottom stop."); 
-  
-  for (int i = curSpeed; i >= 0; i--) //decelerating, coming to a halt at the bottom
+
+  Serial.println("Decelerating to bottom stop.");
+
+  for (int i = curSpeed; i <= 0; i++) //decelerating, coming to a halt at the bottom
   {
-    md.setM1Speed(i);
+    setVel(i);
     checkStop();
     if (i % 50 == 0) printCurrent();
     delay(ramp);
   }
 
-  for (int i = -400; i <= 0; i++)
+  setVel(0); // just for good measure
+  Serial.println("Wait at bottom.");
+  delay(timeDown); //waiting at the bottom
+  
+  Serial.println("Accelerating up.");
+  
+  for (int i = 0; i <= speedUp; i++) //curSpeed should be 0, accelerate up
   {
-    md.setM1Speed(i);
+    setVel(i);
     checkStop();
-    if (i % 200 == 100)
-    {
-      Serial.print("M1 current: ");
-      Serial.println(md.getM1CurrentMilliamps());
-    }
-    delay(2);
+    if (limit==1) break; // if limit switch was hit, break out of the for loop
+    if (i % 50 == 0) printCurrent();
+    delay(ramp);
   }
-
+  
+  Serial.println("Travelling up.");
+  travel(travelUp); //travelling up for the predefined amount of time
+  delay(timeUp); //waiting at the bottom
+  Serial.println("Decelerating up.");
+  for (int i = curSpeed; i >= 0; i--) //decelerating
+  {
+    setVel(i);
+    checkStop();
+    if (limit==1) break; // if limit switch was hit, break out of the for loop
+    if (i % 50 == 0) printCurrent();
+    delay(ramp);
+  }
+  
+  setVel(0); // just for good measure
+  Serial.println("Wait at top.");
+  delay(timeUp); //waiting at the bottom
+  
 
 }
