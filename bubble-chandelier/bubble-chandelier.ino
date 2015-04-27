@@ -9,7 +9,6 @@
 //  _EN1DIAG1 = 6;
 //  _PWM1 = 9; //fixed to timer
 //  _CS1 = A0;
-
 //  limit switch = 3
 
 //  _INA2 = 7;
@@ -19,18 +18,19 @@
 
 DualVNH5019MotorShield md;
 
-int speedHome = 100;
-int speedDown = -250;
-int speedUp = 250;
-int ramp = 30; // ramp time at acceleration and deceleration
-unsigned long travelDown = 3000;
-unsigned long travelUp = travelDown;
-unsigned long timeDown = 1000; //time to spend at the bottom
-unsigned long timeUp = 1000; //time to spend at the top
+int speedHome = 200;
+int speedDown = -150;
+int speedUp = 200;
+int ramp = 10; // ramp time at acceleration and deceleration
+unsigned long travelDown = 15000;
+unsigned long travelUp = 30000; //maximum time to travel up
+unsigned long timeDown = 500; //time to spend at the bottom
+unsigned long timeUp = 500; //time to spend at the top
 
+unsigned long runcounts = 0;
 int curSpeed = 0;
 int limit = 0; // global for limit switch, 1 if triggered
-int maxCurrent = 6000; // maximum current in mA
+int maxCurrent = 3500; // maximum current in mA
 int motorSpeed = 0;
 
 void pCurrent () {
@@ -89,8 +89,9 @@ void checkStop()
     }
   }
 
-  if (md.getM1CurrentMilliamps() > maxCurrent) {
-    //md.setM1Speed(50);
+int curTest = md.getM1CurrentMilliamps();
+
+  if (curTest > maxCurrent) {
     Serial.print("Exceeding maxCurrent, ");
     printCurrent();
   }
@@ -114,7 +115,10 @@ void setup()
   md.init(); //initialize motor driver instance
   printCurrent();
   // start to ride down a little bit when the machine is powered up, just to make sure that we are not past the top end switch.
-
+  /*while (1) {
+    setVel(-200);
+  } */
+  
   if (limit == 1) Serial.println("Limit switch active during startup.");
   if (limit == 0) {
     Serial.println("Limit switch inactive, accelerating upwards.");
@@ -134,61 +138,36 @@ void setup()
       delay(1);
     }
     Serial.println("Top reached.");
+    delay(500);
   }
 }
 
 void loop()
 {
-  for (int i = 0; i >= speedDown; i--) //accelerating downwards
-  {
-    setVel(i);
-    checkStop();
-    delay(5);
-  }
-
+  accelerateDown();
+  printCurrent();
   travel(travelDown); //travelling down for the predefined amount of time
-
-  Serial.println("Decelerating to bottom stop.");
-
-  for (int i = curSpeed; i <= 0; i++) //decelerating, coming to a halt at the bottom
-  {
-    setVel(i);
-    checkStop();
-    if (i % 50 == 0) printCurrent();
-    delay(ramp);
-  }
-
+  printCurrent();
+  decelerateDown();
+  
   setVel(0); // just for good measure
   Serial.println("Wait at bottom.");
   delay(timeDown); //waiting at the bottom
-  
-  Serial.println("Accelerating up.");
-  
-  for (int i = 0; i <= speedUp; i++) //curSpeed should be 0, accelerate up
-  {
-    setVel(i);
-    checkStop();
-    if (limit==1) break; // if limit switch was hit, break out of the for loop
-    if (i % 50 == 0) printCurrent();
-    delay(ramp);
-  }
-  
-  Serial.println("Travelling up.");
-  travel(travelUp); //travelling up for the predefined amount of time
-  delay(timeUp); //waiting at the bottom
-  Serial.println("Decelerating up.");
-  for (int i = curSpeed; i >= 0; i--) //decelerating
-  {
-    setVel(i);
-    checkStop();
-    if (limit==1) break; // if limit switch was hit, break out of the for loop
-    if (i % 50 == 0) printCurrent();
-    delay(ramp);
-  }
+
+  accelerateUp();
+  printCurrent();
+
+    if (limit == 0) { 
+      Serial.println("Travel up.");
+      travel(travelUp); //travelling up for the predefined amount of time
+      printCurrent();
+    }
+    
+  if (limit == 0) decelerateUp();
   
   setVel(0); // just for good measure
-  Serial.println("Wait at top.");
-  delay(timeUp); //waiting at the bottom
-  
-
+  Serial.print("Wait at top, run no. ");
+  Serial.println(runcounts);
+  runcounts++;
+  delay(timeUp); //waiting at the top
 }
